@@ -8,6 +8,7 @@
 #define UP 2
 #define DOWN 3
 
+#define SNAKEDELAY 15
 // leave the following line uncommented for use with a Digispark
 //DigiPixel digiPixel(3,0,5,2,1);  // LED Latch/Button Shift !load pin, LED/Button clock pin, LED Data Pin, LED Output Enable pin, Buttons data pin)
 
@@ -21,11 +22,12 @@ byte numberTable[30]PROGMEM = {0b01111110, 0b01000010, 0b01111110, 0b00100010, 0
 byte snakeX = 6;
 byte snakeY = 3;
 byte snakeColor = 2;
+byte snakeHeadColor = 4;
 byte snakeLength = 1;
 byte snakeDirection = LEFT;
 byte snakeHistoryX[64];
 byte snakeHistoryY[64];
-byte snakeDelay = 30;
+byte snakeDelay = SNAKEDELAY;
 bool snakeMoved = false;
 
 byte appleX;
@@ -174,7 +176,7 @@ void moveSnake()
 
   if (--snakeDelay != 0)return;
 
-  snakeDelay = 50;
+  snakeDelay = SNAKEDELAY;
   snakeMoved = true;
 
   if (snakeDirection == RIGHT)
@@ -257,11 +259,7 @@ void checkEatApple()
       }
       looking = !goodSpot;
     }
-
-
   }
-
-
 }
 
 void saveGraphics()
@@ -274,28 +272,32 @@ void saveGraphics()
 
   digiPixel.setPixel(appleX, appleY, appleColor);
 
-  for (byte i = 0; i < snakeLength; ++i)
+  digiPixel.setPixel(snakeHistoryX[0], snakeHistoryY[0], snakeHeadColor);
+  for (byte i = 1; i < snakeLength; ++i)
   {
     digiPixel.setPixel(snakeHistoryX[i], snakeHistoryY[i], snakeColor);
   }
-
 }
 
 void showDeath()
 {
   snakeColor = 1;
 
-  for (int i = 0; i < 3; i++)
+  for (int i = 0; i < 6; i++)
   {
+   
+
     saveGraphics();
-    
     for (int j = 0; j < 100; ++j)
     {
-      digiPixel.drawScreen();
+     digiPixel.drawScreen();
+
+       // Check for button press to start new game
+       digiPixel.saveButtonStates();
+       if (digiPixel.buttonAPressed == true or digiPixel.buttonBPressed == true) { 
+         goto reset; // break would only exit one loop
+       }
     }
-
-
-
 
     digiPixel.clearScreen();
     digiPixel.drawScreen();
@@ -309,21 +311,27 @@ void showDeath()
       digiPixel.bufferBlue[index + 4] = pgm_read_dword(&numberTable[index + (3 * scoreOnes)]);
     }
     
-   for (int j = 0; j < 100; ++j)
+    for (int j = 0; j < 100; ++j)
     {
       digiPixel.drawScreen();
+
+      digiPixel.saveButtonStates();
+      if (digiPixel.buttonAPressed == true or digiPixel.buttonBPressed == true) { 
+         goto reset; // break would only exit one loop
+      }
     }
-    
-    delay(500);
+ 
+    delay(400);
   }
 
   //reset
+  reset:
   snakeX = 6;
   snakeY = 3;
   snakeColor = 2;
   snakeLength = 1;
   snakeDirection = LEFT;
-  snakeDelay = 30;
+  snakeDelay = SNAKEDELAY;
   snakeMoved = false;
 
   appleX = random(0, 7);
@@ -331,5 +339,4 @@ void showDeath()
   gameRunning = true;
 
   clearHistory();
-
 }
