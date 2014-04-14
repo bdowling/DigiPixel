@@ -57,6 +57,7 @@ byte Track2Barriers[128]PROGMEM={0b10000001, 0b10000001, 0b10000001, 0b10000001,
 #define ForwardSpeedSave 7
 #define TitleScreen 0
 #define PlayingGame 1
+#define PlayingGameHoriz 2
 #define ScrollingSpeedSave 5
 
 // Variables
@@ -69,7 +70,7 @@ int TrackOffset = 0;
 byte GameMode = TitleScreen;
 byte TitleOffset = 0;
 byte ScrollingSpeed = ScrollingSpeedSave;
-
+int LoopTimes = 0;
 
 void setupTheGreatRace(){
   
@@ -90,8 +91,16 @@ void checkModeChange(){
   if (GameMode == TitleScreen & digiPixel.buttonAPressed){
    GameMode = PlayingGame;
    TrackOffset = 0;
+   LoopTimes = 0;
    CarX = 4;
    CarY = 0;
+  } 
+  if (GameMode == TitleScreen & digiPixel.buttonBPressed){  // Horizontal Scroller or Portrait mode
+   GameMode = PlayingGameHoriz;
+   TrackOffset = 0;
+   LoopTimes = 0;
+   CarX = 2;
+   CarY = 2;
   } 
 }
 
@@ -115,7 +124,7 @@ void updateGraphicsTheGreatRace(){
      } 
     }
   }
-  else if (GameMode == PlayingGame){
+  else if (GameMode != TitleScreen){
     if (SteeringSpeed != 0){
       SteeringSpeed--;
     }
@@ -137,12 +146,15 @@ void updateGraphicsTheGreatRace(){
         CarX++;    
       }
     }
-    
-    if (ForwardSpeed != 0){
+    LoopTimes++;
+    if (ForwardSpeed > 1){
      ForwardSpeed--; 
     }
     else{
-     ForwardSpeed = ForwardSpeedSave;
+     ForwardSpeed = ForwardSpeedSave - int(LoopTimes / 300);
+     if (ForwardSpeed < 0) {
+       ForwardSpeed = 1;
+     }
      TrackOffset++;
      if (TrackOffset == (sizeof(Track2Barriers) - 8)){
       TrackOffset = 0;
@@ -160,14 +172,16 @@ void saveGraphicsTheGreatRace(){
      digiPixel.bufferBlue[index] = pgm_read_dword(&TitleBlue[(index) + TitleOffset]);
     }
   }
-  else if (GameMode == PlayingGame){
+  else if (GameMode == PlayingGame or GameMode == PlayingGameHoriz){
     for (byte index = 0; index <= 7; index++){
      digiPixel.bufferRed[index] = pgm_read_dword(&Track2Red[(index) + TrackOffset]);
      digiPixel.bufferGreen[index] = pgm_read_dword(&Track2Green[(index) + TrackOffset]);
      digiPixel.bufferBlue[index] = pgm_read_dword(&Track2Blue[(index) + TrackOffset]);
      digiPixel.bufferBarriers[index] = pgm_read_dword(&Track2Barriers[(index) + TrackOffset]);
     }
-  digiPixel.rotateScreen(90);
+  if (GameMode == PlayingGame) { // No rotate for PlayingModeHoriz
+    digiPixel.rotateScreen(90);
+  }
   bitWrite(digiPixel.bufferRed[CarX],CarY,1);
   bitWrite(digiPixel.bufferGreen[CarX],CarY,0);
   bitWrite(digiPixel.bufferBlue[CarX],CarY,0);
@@ -189,6 +203,7 @@ void saveGraphicsTheGreatRace(){
 #define UP 2
 #define DOWN 3
 
+#define SNAKEDELAY 15
 // leave the following line uncommented for use with a Digispark
 //DigiPixel digiPixel(3,0,5,2,1);  // LED Latch/Button Shift !load pin, LED/Button clock pin, LED Data Pin, LED Output Enable pin, Buttons data pin)
 
@@ -202,11 +217,12 @@ byte numberTable[30]PROGMEM = {0b01111110, 0b01000010, 0b01111110, 0b00100010, 0
 byte snakeX = 6;
 byte snakeY = 3;
 byte snakeColor = 2;
+byte snakeHeadColor = 4;
 byte snakeLength = 1;
 byte snakeDirection = LEFT;
 byte snakeHistoryX[64];
 byte snakeHistoryY[64];
-byte snakeDelay = 30;
+byte snakeDelay = SNAKEDELAY;
 bool snakeMoved = false;
 
 byte appleX;
@@ -355,7 +371,7 @@ void moveSnake()
 
   if (--snakeDelay != 0)return;
 
-  snakeDelay = 50;
+  snakeDelay = SNAKEDELAY;
   snakeMoved = true;
 
   if (snakeDirection == RIGHT)
@@ -438,11 +454,7 @@ void checkEatApple()
       }
       looking = !goodSpot;
     }
-
-
   }
-
-
 }
 
 void saveGraphicsSnakePixel()
@@ -455,28 +467,32 @@ void saveGraphicsSnakePixel()
 
   digiPixel.setPixel(appleX, appleY, appleColor);
 
-  for (byte i = 0; i < snakeLength; ++i)
+  digiPixel.setPixel(snakeHistoryX[0], snakeHistoryY[0], snakeHeadColor);
+  for (byte i = 1; i < snakeLength; ++i)
   {
     digiPixel.setPixel(snakeHistoryX[i], snakeHistoryY[i], snakeColor);
   }
-
 }
 
 void showDeath()
 {
   snakeColor = 1;
 
-  for (int i = 0; i < 3; i++)
+  for (int i = 0; i < 6; i++)
   {
+   
+
     saveGraphicsSnakePixel();
-    
     for (int j = 0; j < 100; ++j)
     {
-      digiPixel.drawScreen();
+     digiPixel.drawScreen();
+
+       // Check for button press to start new game
+       digiPixel.saveButtonStates();
+       if (digiPixel.buttonAPressed == true or digiPixel.buttonBPressed == true) { 
+         goto reset; // break would only exit one loop
+       }
     }
-
-
-
 
     digiPixel.clearScreen();
     digiPixel.drawScreen();
@@ -490,21 +506,27 @@ void showDeath()
       digiPixel.bufferBlue[index + 4] = pgm_read_dword(&numberTable[index + (3 * scoreOnes)]);
     }
     
-   for (int j = 0; j < 100; ++j)
+    for (int j = 0; j < 100; ++j)
     {
       digiPixel.drawScreen();
+
+      digiPixel.saveButtonStates();
+      if (digiPixel.buttonAPressed == true or digiPixel.buttonBPressed == true) { 
+         goto reset; // break would only exit one loop
+      }
     }
-    
-    delay(500);
+ 
+    delay(400);
   }
 
   //reset
+  reset:
   snakeX = 6;
   snakeY = 3;
   snakeColor = 2;
   snakeLength = 1;
   snakeDirection = LEFT;
-  snakeDelay = 30;
+  snakeDelay = SNAKEDELAY;
   snakeMoved = false;
 
   appleX = random(0, 7);
@@ -512,7 +534,6 @@ void showDeath()
   gameRunning = true;
 
   clearHistory();
-
 }
 // --- END of Merge ../SnakePixel/SnakePixel.ino ----------------------------
 // --- Merged in ../SuperPixelBros/SuperPixelBros.ino ----------------------------
