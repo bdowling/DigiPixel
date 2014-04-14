@@ -24,6 +24,7 @@ byte Track2Barriers[128]PROGMEM={0b10000001, 0b10000001, 0b10000001, 0b10000001,
 #define ForwardSpeedSave 7
 #define TitleScreen 0
 #define PlayingGame 1
+#define PlayingGameHoriz 2
 #define ScrollingSpeedSave 5
 
 // Variables
@@ -36,7 +37,7 @@ int TrackOffset = 0;
 byte GameMode = TitleScreen;
 byte TitleOffset = 0;
 byte ScrollingSpeed = ScrollingSpeedSave;
-
+int LoopTimes = 0;
 
 void setup(){
   
@@ -57,8 +58,16 @@ void checkModeChange(){
   if (GameMode == TitleScreen & digiPixel.buttonAPressed){
    GameMode = PlayingGame;
    TrackOffset = 0;
+   LoopTimes = 0;
    CarX = 4;
    CarY = 0;
+  } 
+  if (GameMode == TitleScreen & digiPixel.buttonBPressed){  // Horizontal Scroller or Portrait mode
+   GameMode = PlayingGameHoriz;
+   TrackOffset = 0;
+   LoopTimes = 0;
+   CarX = 2;
+   CarY = 2;
   } 
 }
 
@@ -82,7 +91,7 @@ void updateGraphics(){
      } 
     }
   }
-  else if (GameMode == PlayingGame){
+  else if (GameMode != TitleScreen){
     if (SteeringSpeed != 0){
       SteeringSpeed--;
     }
@@ -104,12 +113,15 @@ void updateGraphics(){
         CarX++;    
       }
     }
-    
-    if (ForwardSpeed != 0){
+    LoopTimes++;
+    if (ForwardSpeed > 1){
      ForwardSpeed--; 
     }
     else{
-     ForwardSpeed = ForwardSpeedSave;
+     ForwardSpeed = ForwardSpeedSave - int(LoopTimes / 300);
+     if (ForwardSpeed < 0) {
+       ForwardSpeed = 1;
+     }
      TrackOffset++;
      if (TrackOffset == (sizeof(Track2Barriers) - 8)){
       TrackOffset = 0;
@@ -127,14 +139,16 @@ void saveGraphics(){
      digiPixel.bufferBlue[index] = pgm_read_dword(&TitleBlue[(index) + TitleOffset]);
     }
   }
-  else if (GameMode == PlayingGame){
+  else if (GameMode == PlayingGame or GameMode == PlayingGameHoriz){
     for (byte index = 0; index <= 7; index++){
      digiPixel.bufferRed[index] = pgm_read_dword(&Track2Red[(index) + TrackOffset]);
      digiPixel.bufferGreen[index] = pgm_read_dword(&Track2Green[(index) + TrackOffset]);
      digiPixel.bufferBlue[index] = pgm_read_dword(&Track2Blue[(index) + TrackOffset]);
      digiPixel.bufferBarriers[index] = pgm_read_dword(&Track2Barriers[(index) + TrackOffset]);
     }
-  digiPixel.rotateScreen(90);
+  if (GameMode == PlayingGame) { // No rotate for PlayingModeHoriz
+    digiPixel.rotateScreen(90);
+  }
   bitWrite(digiPixel.bufferRed[CarX],CarY,1);
   bitWrite(digiPixel.bufferGreen[CarX],CarY,0);
   bitWrite(digiPixel.bufferBlue[CarX],CarY,0);
